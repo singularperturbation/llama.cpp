@@ -587,6 +587,7 @@ struct common_params {
     std::string public_path   = "";                                                                         // NOLINT
     std::string api_prefix    = "";                                                                         // NOLINT
     std::string chat_template = "";                                                                         // NOLINT
+    std::string chat_template_tool_format = "auto";
     bool use_jinja = true;                                                                                  // NOLINT
     bool enable_chat_template = true;
     bool force_pure_content_parser = false;

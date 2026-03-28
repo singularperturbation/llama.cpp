@@ -505,7 +505,25 @@ static void test_filters(testing & t) {
         "hello"
     );
 
-    test_template(t, "capitalize",
+    test_template(t, "format string",
+        "{{ '%s' | format('hello') }}",
+        json::object(),
+        "hello"
+    );
+
+    test_template(t, "format int",
+        "{{ '%d' | format(42) }}",
+        json::object(),
+        "42"
+    );
+
+    test_template(t, "format float",
+        "{{ '%.2f' | format(3.14159) }}",
+        json::object(),
+        "3.14"
+    );
+
+    test_template(t, "tojson",
         "{{ 'heLlo World'|capitalize }}",
         json::object(),
         "Hello world"

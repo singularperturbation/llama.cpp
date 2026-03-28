@@ -69,6 +69,7 @@ struct generation_params {
     bool                                  is_inference  = true;
     bool                                  add_inference = false;
     bool                                  mark_input    = true;  // whether to mark input strings in the jinja context
+    std::string                           chat_template_tool_format = "auto";
 };
 
 // ============================================================================
@@ -144,6 +145,7 @@ enum class tool_format {
     JSON_NATIVE,      // Pure JSON: {"name": "X", "arguments": {...}}
     TAG_WITH_JSON,    // Tag-based with JSON args: <function=X>{...}</function>
     TAG_WITH_TAGGED,  // Tag-based with tagged args: <param=key>value</param>
+    PYTHONIC,         // Python-style tool calls: [name(arg="value")]
 };
 
 inline std::ostream & operator<<(std::ostream & os, const tool_format & format) {
@@ -156,6 +158,8 @@ inline std::ostream & operator<<(std::ostream & os, const tool_format & format) 
             return os << "TAG_WITH_JSON";
         case tool_format::TAG_WITH_TAGGED:
             return os << "TAG_WITH_TAGGED";
+        case tool_format::PYTHONIC:
+            return os << "PYTHONIC";
         default:
             return os << "UNKNOWN";
     }
@@ -350,6 +354,7 @@ struct analyze_tools : analyze_base {
     common_peg_parser build_tool_parser_json_native(parser_build_context & ctx) const;
     common_peg_parser build_tool_parser_tag_json(parser_build_context & ctx) const;
     common_peg_parser build_tool_parser_tag_tagged(parser_build_context & ctx) const;
+    common_peg_parser build_tool_parser_pythonic(parser_build_context & ctx) const;
 };
 
 // ============================================================================

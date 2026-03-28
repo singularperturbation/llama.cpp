@@ -552,10 +552,13 @@ common_peg_parser common_chat_peg_builder::python_style_tool_calls(
         tool_choices |= rule("tool-" + name, tool_parser);
     }
 
+    auto list_parser = tool_choices + zero_or_more("," + space() + tool_choices);
+    auto bracketed_list = literal("[") + space() + list_parser + space() + literal("]");
+
     if (parallel_tool_calls) {
-        return "[" + space() + tool_choices + zero_or_more("," + space() + tool_choices) + space() + "]";
+        return choice({ bracketed_list, list_parser });
     }
-    return "[" + space() + tool_choices + space() + "]";
+    return choice({ bracketed_list, tool_choices });
 }
 
 // Helper: Parse dot notation key into prefix and field name

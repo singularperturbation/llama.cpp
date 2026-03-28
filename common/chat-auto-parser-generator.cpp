@@ -34,12 +34,52 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
     // Run differential analysis to extract template structure
     struct autoparser autoparser;
     autoparser.analyze_template(tmpl);
+
+    if (inputs.chat_template_tool_format == "pythonic") {
+        autoparser.tools.format.mode = tool_format::PYTHONIC;
+        autoparser.jinja_caps.supports_tool_calls = true;
+        autoparser.tools.format.section_start = "";
+        autoparser.tools.format.section_end = "";
+        autoparser.tools.format.per_call_start = "";
+        autoparser.tools.format.per_call_end = "";
+        autoparser.tools.function.name_prefix = "";
+        autoparser.tools.function.name_suffix = "";
+        autoparser.tools.arguments.name_prefix = "";
+        autoparser.tools.arguments.name_suffix = "";
+        autoparser.tools.arguments.value_prefix = "";
+        autoparser.tools.arguments.value_suffix = "";
+    } else if (inputs.chat_template_tool_format == "json") {
+        autoparser.tools.format.mode = tool_format::JSON_NATIVE;
+        autoparser.jinja_caps.supports_tool_calls = true;
+    }
+
     return generate_parser(tmpl, inputs, autoparser);
 }
 
 common_chat_params peg_generator::generate_parser(const common_chat_template &    tmpl,
                                                   const struct generation_params & inputs,
-                                                  const autoparser &              autoparser) {
+                                                  const autoparser &              autoparser_in) {
+    // Create a local copy to allow overrides
+    struct autoparser autoparser = autoparser_in;
+
+    if (inputs.chat_template_tool_format == "pythonic") {
+        autoparser.tools.format.mode = tool_format::PYTHONIC;
+        autoparser.jinja_caps.supports_tool_calls = true;
+        autoparser.tools.format.section_start = "";
+        autoparser.tools.format.section_end = "";
+        autoparser.tools.format.per_call_start = "";
+        autoparser.tools.format.per_call_end = "";
+        autoparser.tools.function.name_prefix = "";
+        autoparser.tools.function.name_suffix = "";
+        autoparser.tools.arguments.name_prefix = "";
+        autoparser.tools.arguments.name_suffix = "";
+        autoparser.tools.arguments.value_prefix = "";
+        autoparser.tools.arguments.value_suffix = "";
+    } else if (inputs.chat_template_tool_format == "json") {
+        autoparser.tools.format.mode = tool_format::JSON_NATIVE;
+        autoparser.jinja_caps.supports_tool_calls = true;
+    }
+
     // Create the result structure
     common_chat_params data;
     data.prompt           = common_chat_template_direct_apply(tmpl, inputs);
@@ -54,14 +94,18 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
         autoparser.tools.format.mode != tool_format::NONE && inputs.tools.is_array() && !inputs.tools.empty();
     std::string trigger_marker = !autoparser.tools.format.section_start.empty() ? autoparser.tools.format.section_start :
                                                                                   autoparser.tools.format.per_call_start;
+    if (trigger_marker.empty() && autoparser.tools.format.mode == tool_format::PYTHONIC) {
+        trigger_marker = "[";
+    }
 
     bool has_response_format = !inputs.json_schema.empty() && inputs.json_schema.is_object();
     bool include_grammar = has_response_format || (has_tools &&
-            ((inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO && !trigger_marker.empty()) ||
+            ((inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO && (!trigger_marker.empty() || autoparser.tools.format.mode == tool_format::PYTHONIC)) ||
               inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED));
 
     if (include_grammar) {
-        data.grammar_lazy = !has_response_format && inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO;
+        data.grammar_lazy = !has_response_format && inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO &&
+                            autoparser.tools.format.mode != tool_format::PYTHONIC;
         data.grammar      = build_grammar([&](const common_grammar_builder & builder) {
             foreach_function(inputs.tools, [&](const json & tool) {
                 const auto & function = tool.at("function");
@@ -166,12 +210,38 @@ common_peg_parser analyze_tools::build_parser(parser_build_context & ctx) const 
             return build_tool_parser_tag_json(ctx);
         case tool_format::TAG_WITH_TAGGED:
             return build_tool_parser_tag_tagged(ctx);
+        case tool_format::PYTHONIC:
+            return build_tool_parser_pythonic(ctx);
         default:
             LOG_ERR("[ERROR] Template seems to support tool calls, but failed to determine tool format. Tool calling will not work properly. "
                 "Check for a fixed template for your model in the models/templates directory of your llama.cpp installation or "
                 "report an issue at https://github.com/ggml-org/llama.cpp/issues\n");
             return ctx.p.eps();
     }
+}
+
+common_peg_parser analyze_tools::build_tool_parser_pythonic(parser_build_context & ctx) const {
+    auto &       p           = ctx.p;
+    const auto & inputs      = ctx.inputs;
+    bool         force_tools = inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED;
+
+    // Use pure Pythonic grammar generator (ignores analyzer state)
+    auto tools_parser = p.python_style_tool_calls(inputs.tools, inputs.parallel_tool_calls);
+
+    // Pythonic tool calls can start with [ or a tool name (naked calls)
+    auto triggered_tools = p.trigger_rule("tool-call", tools_parser);
+
+    if (ctx.content && ctx.content->is_always_wrapped()) {
+        auto wrapped_content = ctx.content->build_optional_wrapped(ctx);
+        return ctx.reasoning_parser + wrapped_content + triggered_tools + p.end();
+    }
+
+    std::vector<std::string> triggers = { "[" };
+    foreach_function(inputs.tools, [&](const json & tool) {
+        triggers.push_back(tool.at("function").at("name").get<std::string>());
+    });
+
+    return ctx.reasoning_parser + (force_tools ? p.eps() : p.optional(p.content(p.until_one_of(triggers)))) + triggered_tools + p.content(p.rest()) + p.end();
 }
 
 common_peg_parser analyze_tools::build_tool_parser_json_native(parser_build_context & ctx) const {

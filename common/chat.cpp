@@ -1561,6 +1561,7 @@ static common_chat_params common_chat_templates_apply_jinja(const struct common_
     params.now              = inputs.now;
     params.add_bos          = tmpls->add_bos;
     params.add_eos          = tmpls->add_eos;
+    params.chat_template_tool_format = inputs.chat_template_tool_format;
 
     if (src.find("<|channel|>") == std::string::npos) {
         // map developer to system for all models except for GPT-OSS

@@ -283,6 +283,7 @@ struct server_chat_params {
     bool prefill_assistant;
     common_reasoning_format reasoning_format;
     std::map<std::string, std::string> chat_template_kwargs; // mapping key --> json value
+    std::string chat_template_tool_format = "auto";
     common_chat_templates_ptr tmpls;
     bool allow_image;
     bool allow_audio;

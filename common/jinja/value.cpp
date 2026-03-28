@@ -514,6 +514,26 @@ const func_builtins & value_string_t::get_builtins() const {
             jinja::string str = args.get_pos(0)->as_string().lowercase();
             return mk_val<value_string>(str);
         }},
+        {"format", [](const func_args & args) -> value {
+            args.ensure_count(2);
+            // First argument is the string itself (input to filter)
+            // Second argument is the value to format
+            std::string fmt = args.get_pos(0)->as_string().str();
+            auto val = args.get_pos(1);
+
+            char buf[1024];
+            if (is_val<value_int>(val)) {
+                snprintf(buf, sizeof(buf), fmt.c_str(), val->as_int());
+            } else if (is_val<value_float>(val)) {
+                snprintf(buf, sizeof(buf), fmt.c_str(), val->as_float());
+            } else if (is_val<value_string>(val)) {
+                snprintf(buf, sizeof(buf), fmt.c_str(), val->as_string().str().c_str());
+            } else {
+                return val; // Fallback
+            }
+            return mk_val<value_string>(std::string(buf));
+        }},
+        {"tojson", tojson},
         {"strip", [](const func_args & args) -> value {
             value val_input = args.get_pos(0);
             if (!is_val<value_string>(val_input)) {
