@@ -379,6 +379,9 @@ struct autoparser {
     // Build the PEG parser for this template
     common_peg_arena build_parser(const generation_params & inputs) const;
 
+    // Apply manual overrides (e.g. from CLI args)
+    void apply_overrides(const generation_params & inputs);
+
   private:
     // Collect tokens from entire analysis to preserve
     void collect_preserved_tokens();

@@ -34,24 +34,7 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
     // Run differential analysis to extract template structure
     struct autoparser autoparser;
     autoparser.analyze_template(tmpl);
-
-    if (inputs.chat_template_tool_format == "pythonic") {
-        autoparser.tools.format.mode = tool_format::PYTHONIC;
-        autoparser.jinja_caps.supports_tool_calls = true;
-        autoparser.tools.format.section_start = "";
-        autoparser.tools.format.section_end = "";
-        autoparser.tools.format.per_call_start = "";
-        autoparser.tools.format.per_call_end = "";
-        autoparser.tools.function.name_prefix = "";
-        autoparser.tools.function.name_suffix = "";
-        autoparser.tools.arguments.name_prefix = "";
-        autoparser.tools.arguments.name_suffix = "";
-        autoparser.tools.arguments.value_prefix = "";
-        autoparser.tools.arguments.value_suffix = "";
-    } else if (inputs.chat_template_tool_format == "json") {
-        autoparser.tools.format.mode = tool_format::JSON_NATIVE;
-        autoparser.jinja_caps.supports_tool_calls = true;
-    }
+    autoparser.apply_overrides(inputs);
 
     return generate_parser(tmpl, inputs, autoparser);
 }
@@ -61,24 +44,7 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
                                                   const autoparser &              autoparser_in) {
     // Create a local copy to allow overrides
     struct autoparser autoparser = autoparser_in;
-
-    if (inputs.chat_template_tool_format == "pythonic") {
-        autoparser.tools.format.mode = tool_format::PYTHONIC;
-        autoparser.jinja_caps.supports_tool_calls = true;
-        autoparser.tools.format.section_start = "";
-        autoparser.tools.format.section_end = "";
-        autoparser.tools.format.per_call_start = "";
-        autoparser.tools.format.per_call_end = "";
-        autoparser.tools.function.name_prefix = "";
-        autoparser.tools.function.name_suffix = "";
-        autoparser.tools.arguments.name_prefix = "";
-        autoparser.tools.arguments.name_suffix = "";
-        autoparser.tools.arguments.value_prefix = "";
-        autoparser.tools.arguments.value_suffix = "";
-    } else if (inputs.chat_template_tool_format == "json") {
-        autoparser.tools.format.mode = tool_format::JSON_NATIVE;
-        autoparser.jinja_caps.supports_tool_calls = true;
-    }
+    autoparser.apply_overrides(inputs);
 
     // Create the result structure
     common_chat_params data;
@@ -124,6 +90,28 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
     }
 
     return data;
+}
+
+void autoparser::apply_overrides(const generation_params & inputs) {
+    if (inputs.chat_template_tool_format == "pythonic") {
+        tools.format.mode = tool_format::PYTHONIC;
+        jinja_caps.supports_tool_calls = true;
+
+        // Clear analyzer state that might interfere
+        tools.format.section_start = "";
+        tools.format.section_end = "";
+        tools.format.per_call_start = "";
+        tools.format.per_call_end = "";
+        tools.function.name_prefix = "";
+        tools.function.name_suffix = "";
+        tools.arguments.name_prefix = "";
+        tools.arguments.name_suffix = "";
+        tools.arguments.value_prefix = "";
+        tools.arguments.value_suffix = "";
+    } else if (inputs.chat_template_tool_format == "json") {
+        tools.format.mode = tool_format::JSON_NATIVE;
+        jinja_caps.supports_tool_calls = true;
+    }
 }
 
 common_peg_arena autoparser::build_parser(const generation_params & inputs) const {

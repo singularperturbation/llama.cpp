@@ -515,23 +515,60 @@ const func_builtins & value_string_t::get_builtins() const {
             return mk_val<value_string>(str);
         }},
         {"format", [](const func_args & args) -> value {
-            args.ensure_count(2);
-            // First argument is the string itself (input to filter)
-            // Second argument is the value to format
-            std::string fmt = args.get_pos(0)->as_string().str();
-            auto val = args.get_pos(1);
-
-            char buf[1024];
-            if (is_val<value_int>(val)) {
-                snprintf(buf, sizeof(buf), fmt.c_str(), val->as_int());
-            } else if (is_val<value_float>(val)) {
-                snprintf(buf, sizeof(buf), fmt.c_str(), val->as_float());
-            } else if (is_val<value_string>(val)) {
-                snprintf(buf, sizeof(buf), fmt.c_str(), val->as_string().str().c_str());
-            } else {
-                return val; // Fallback
+            if (args.count() < 2) {
+                throw raised_exception("format() filter requires at least one argument");
             }
-            return mk_val<value_string>(std::string(buf));
+            // First argument is the format string itself (input to filter)
+            std::string fmt = args.get_pos(0)->as_string().str();
+
+            // Llama 3.2 uses "%s" | format(val)
+            if (fmt == "%s" && args.count() == 2) {
+                return mk_val<value_string>(args.get_pos(1)->as_string());
+            }
+
+            // For more complex formats, we'd ideally use vsnprintf, but for now
+            // let's at least make the common 1-arg case safe and support larger buffers.
+            if (args.count() == 2) {
+                auto val = args.get_pos(1);
+                std::vector<char> buf(std::max((size_t)1024, fmt.length() * 2));
+                int written = 0;
+
+                if (is_val<value_int>(val)) {
+                    // Try to catch common mistake: using %s for an int
+                    if (fmt.find("%s") != std::string::npos) {
+                        return mk_val<value_string>(val->as_string());
+                    }
+                    written = snprintf(buf.data(), buf.size(), fmt.c_str(), val->as_int());
+                } else if (is_val<value_float>(val)) {
+                    if (fmt.find("%s") != std::string::npos) {
+                        return mk_val<value_string>(val->as_string());
+                    }
+                    written = snprintf(buf.data(), buf.size(), fmt.c_str(), val->as_float());
+                } else if (is_val<value_string>(val)) {
+                    written = snprintf(buf.data(), buf.size(), fmt.c_str(), val->as_string().str().c_str());
+                } else {
+                    return mk_val<value_string>(val->as_string());
+                }
+
+                if (written < 0) {
+                    return mk_val<value_string>(val->as_string()); // Fallback
+                }
+                if ((size_t)written >= buf.size()) {
+                    buf.resize(written + 1);
+                    if (is_val<value_int>(val)) {
+                        snprintf(buf.data(), buf.size(), fmt.c_str(), val->as_int());
+                    } else if (is_val<value_float>(val)) {
+                        snprintf(buf.data(), buf.size(), fmt.c_str(), val->as_float());
+                    } else if (is_val<value_string>(val)) {
+                        snprintf(buf.data(), buf.size(), fmt.c_str(), val->as_string().str().c_str());
+                    }
+                }
+                return mk_val<value_string>(std::string(buf.data()));
+            }
+
+            // Fallback for multiple args or unknown types: just return the format string for now
+            // or we could implement a basic vsnprintf wrapper if really needed.
+            return args.get_pos(0);
         }},
         {"tojson", tojson},
         {"strip", [](const func_args & args) -> value {
