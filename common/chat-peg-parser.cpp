@@ -355,6 +355,15 @@ void common_chat_peg_mapper::map(const common_peg_ast_node & node) {
                 value_content = normalize_quotes_to_json(value_content);
             }
 
+            // Normalize Python literals to JSON literals
+            if (value_content == "True") {
+                value_content = "true";
+            } else if (value_content == "False") {
+                value_content = "false";
+            } else if (value_content == "None") {
+                value_content = "null";
+            }
+
             // Try to parse as JSON value (number, bool, null, object, array)
             try {
                 ordered_json parsed = ordered_json::parse(value_content);

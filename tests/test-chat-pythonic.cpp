@@ -93,11 +93,91 @@ static void test_pythonic_grammar_generation(testing & t) {
     });
 }
 
+static void test_pythonic_types(testing & t) {
+    // 1. Setup tools with mixed types
+    nlohmann::ordered_json tools = nlohmann::ordered_json::array();
+    tools.push_back({
+        {"type", "function"},
+        {"function", {
+            {"name", "get_stock_price"},
+            {"parameters", {
+                {"type", "object"},
+                {"properties", {
+                    {"company", {{"type", "string"}}},
+                    {"month", {{"type", "number"}}},
+                    {"day", {{"type", "number"}}},
+                    {"year", {{"type", "number"}}},
+                    {"deep_dive", {{"type", "boolean"}}}
+                }},
+                {"required", {"company", "month", "day", "year"}}
+            }}
+        }}
+    });
+
+    common_chat_template tmpl("{{ bos_token }}", "128000", "128001");
+
+    generation_params inputs;
+    inputs.tools = tools;
+    inputs.chat_template_tool_format = "pythonic";
+    inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_REQUIRED;
+
+    peg_generator generator;
+    common_chat_params result = generator.generate_parser(tmpl, inputs);
+
+    t.test("parsing pythonic booleans and nulls", [&](testing & t) {
+        common_peg_arena arena;
+        arena.load(result.parser);
+        
+        // Input with True
+        std::string input = "get_stock_price(company='AAPL', month=10, day=12, year=2025, deep_dive=True)";
+        common_peg_parse_context ctx(input);
+        auto parse_result = arena.parse(ctx);
+        
+        t.assert_true("parsing successful", parse_result.success());
+        if (!parse_result.success()) return;
+
+        common_chat_msg msg;
+        common_chat_peg_mapper mapper(msg);
+        mapper.from_ast(ctx.ast, parse_result);
+
+        t.assert_true("one tool call found", msg.tool_calls.size() == 1);
+        if (msg.tool_calls.empty()) return;
+
+        json args = json::parse(msg.tool_calls[0].arguments);
+        t.assert_true("deep_dive is boolean", args["deep_dive"].is_boolean());
+        t.assert_true("deep_dive is true", args["deep_dive"].get<bool>() == true);
+    });
+
+    t.test("parsing pythonic None", [&](testing & t) {
+        common_peg_arena arena;
+        arena.load(result.parser);
+
+        // Input with None
+        std::string input = "get_stock_price(company='AAPL', month=10, day=None, year=2025)";
+        common_peg_parse_context ctx(input);
+        auto parse_result = arena.parse(ctx);
+
+        t.assert_true("parsing successful", parse_result.success());
+        if (!parse_result.success()) return;
+
+        common_chat_msg msg;
+        common_chat_peg_mapper mapper(msg);
+        mapper.from_ast(ctx.ast, parse_result);
+
+        t.assert_true("one tool call found", msg.tool_calls.size() == 1);
+        if (msg.tool_calls.empty()) return;
+
+        json args = json::parse(msg.tool_calls[0].arguments);
+        t.assert_true("day is null", args["day"].is_null());
+    });
+}
+
 int main() {
     testing t(std::cout);
     t.verbose = true;
 
     t.test("pythonic tool calls", test_pythonic_grammar_generation);
+    t.test("pythonic types", test_pythonic_types);
 
     return t.summary();
 }
